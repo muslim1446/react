@@ -1,0 +1,229 @@
+/* styles/c1d2e3f4a5bxa.css */
+
+/* 1. The "Mom" (Wrapper) */
+._k {
+    position: relative;
+    user-select: none;
+    width: 200px;
+    font-family: 'Inter', sans-serif;
+}
+
+/* The Trigger:  Cinematic Style */
+._q {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start; 
+    
+    padding: 0 16px;
+    font-size: 1.5rem;
+    font-family: var(--font-body);
+    font-weight: 600;        
+    letter-spacing: -0.02em; 
+    color: #f9f9f9;
+    height: 48px; 
+    background: rgba(255, 255, 255, 0.04); 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    border-radius: 4px;    
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+    
+    width: 100%; 
+}
+
+/* Text Magic */
+._q span {
+    margin: 0 auto; 
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.5px;
+}
+
+/*  Hover & Focus (The Vibrant Glow) */
+._q:hover,
+._k.open ._q {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.8); /* Becomes bright on hover */
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* 2. The Options (Dropdown) */
+._br {
+    position: absolute;
+    bottom: 115%; /* Slight gap for depth */
+    
+    width: 370px; 
+    left: 50%; 
+    margin-left: -185px; /* Updated to match half of 370px width */
+
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    z-index: 9999; 
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    
+    /* Smooth upward slide */
+    transform: translateY(15px); 
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    
+    max-height: 320px;
+    overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* Custom Scrollbar for Dropdown */
+._br::-webkit-scrollbar {
+    width: 6px;
+}
+._br::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+
+/* Open State */
+._k.open ._br {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: all;
+    transform: translateY(0);
+}
+
+/* Individual Options */
+._b5 {
+    position: relative;
+    display: block;
+    padding: 14px 20px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #a9a9b3; /* Muted text */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    text-align: center;
+    white-space: nowrap; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+._b5:last-child {
+    border-bottom: none;
+}
+
+/*  Active Item Highlight */
+._b5:hover,
+._b5.selected {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    padding-left: 25px; /* Subtle indent on hover */
+}
+
+/* Selected Accent Bar */
+._b5.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent); /* Your color kept */
+    box-shadow: 2px 0 10px var(--accent);
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+    ._k {
+        width: 100%; 
+    }
+}
+
+/* --- MODE 0: HIDING LOGIC --- */
+body._de #chapterSelectWrapper,
+body._de #verseSelectWrapper,
+body._de #translationAudioSelectWrapper,
+body._de #reciterSelectWrapper {
+    display: none !important;
+}
+/* */
+
+/* Premium Focus Style for Transport Buttons */
+._i {
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
+    opacity: 0.7;
+}
+
+._i:hover {
+    opacity: 1;
+}
+
+/* When focused via Keyboard */
+._i:focus-visible {
+    opacity: 1;
+    transform: scale(1.15); /* Pop effect */
+    outline: none;
+    /* Optional: A subtle glow instead of a harsh browser ring */
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+}
+
+/* Ensure the Translation Select matches */
+._q:focus-visible {
+    border-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1);
+}
+/* --- MODE 0: FIXED ICON TRANSLATION --- */
+
+/* 1. Position the Wrapper Fixed at Bottom Right */
+body._de #translationSelectWrapper {
+    position: fixed !important;
+    bottom: 30px !important;
+    right: 5% !important;
+    left: auto !important;
+    
+    width: auto !important;
+    z-index: 9999;
+}
+
+/* 2. Style the Button: JUST THE SVG (No Circle/Border) */
+body._de #translationSelectWrapper ._q {
+    /* Remove fixed width/height so it fits the icon */
+    width: auto;
+    height: auto;
+    padding: 10px; /* Small padding creates a better click target */
+    
+    /* Remove all container styling */
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    
+    /* Ensure icon centering */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Hover Effect: Simple Scale, No Background */
+body._de #translationSelectWrapper ._q:hover {
+    background: transparent !important;
+    transform: scale(1.2); /* Slightly larger zoom on hover */
+    opacity: 0.8;
+}
+
+/* 3. Dropdown Position */
+body._de #translationSelectWrapper ._br {
+    bottom: 100%;
+    right: 0;
+    left: auto;
+    width: 260px;
+    margin-bottom: 10px; /* Add space between icon and menu */
+    transform-origin: bottom right;
+    max-height: 60vh;
+}
