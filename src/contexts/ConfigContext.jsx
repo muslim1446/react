@@ -5,9 +5,14 @@ const ConfigContext = createContext(null);
 
 export function ConfigProvider({ children }) {
   const [config, setConfig] = useState({
-    chapters: [],       // 114 Surah metadata (english_name, description)
-    translations: {},   // 47+ language configs with XML URLs
-    reciters: {},       // 12 reciter configs with CDN paths
+    chapters: [],
+    translations: {},
+    reciters: {},
+    translationAudio: {},
+    storageKey: 'streambasesecured_ca6State_1',
+    rtlCodes: new Set(),
+    keyboardKeys: [],
+    forbiddenToTranslateSet: new Set(),
     loaded: false,
     error: null,
   });
@@ -19,10 +24,35 @@ export function ConfigProvider({ children }) {
       try {
         const data = await fetchConfig();
         if (cancelled) return;
+
+        // Load FTT XML
+        const fttSet = new Set();
+        if (data.FTT_URL) {
+          try {
+            const fttResp = await fetch(data.FTT_URL);
+            if (fttResp.ok) {
+              const fttText = await fttResp.text();
+              const fttDoc = new DOMParser().parseFromString(fttText, 'application/xml');
+              fttDoc.querySelectorAll('streamprotectedcase_c-ww2').forEach(v => {
+                const c = v.getAttribute('streamprotectedtrack_c-ee2')?.trim();
+                const n = v.getAttribute('number')?.trim();
+                if (c && n) fttSet.add(`${c}-${n}`);
+              });
+            }
+          } catch (e) {
+            console.warn('FTT load failed', e);
+          }
+        }
+
         setConfig({
           chapters: data.streamprotectedtrack_cee2 || [],
           translations: data.translations || {},
           reciters: data.streamprotectedlicense_artists_cr1 || {},
+          translationAudio: data.TRANSLATION_AUDIO_CONFIG || {},
+          storageKey: data.STORAGE_KEY || 'streambasesecured_ca6State_1',
+          rtlCodes: new Set(data.RTL_CODES || []),
+          keyboardKeys: data.KEYBOARD_KEYS || [],
+          forbiddenToTranslateSet: fttSet,
           loaded: true,
           error: null,
         });

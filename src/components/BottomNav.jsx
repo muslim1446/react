@@ -2,22 +2,17 @@ import React, { useCallback } from 'react';
 import { usePlayer, ActionTypes } from '../contexts/PlayerContext';
 import { useI18n } from '../contexts/I18nContext';
 
-// =========================================================================
-// BOTTOM NAV — Home / Search / Profile tabs
-// Uses obfuscated class names: #_d8, ._eu, #_en, #_dn, #_dg
-// SVG icons for Home (house) and Search (magnifying glass)
-// =========================================================================
-
 export default function BottomNav() {
   const { state, dispatch } = usePlayer();
   const { t } = useI18n();
 
-  const handleHome = useCallback(() => {
+  const handleHome = useCallback((e) => {
+    e.preventDefault();
     dispatch({ type: ActionTypes.SET_VIEW, payload: 'dashboard' });
   }, [dispatch]);
 
-  const handleSearch = useCallback(() => {
-    // Toggle search overlay
+  const handleSearch = useCallback((e) => {
+    e.preventDefault();
     if (window.openSearch) window.openSearch();
   }, []);
 
@@ -26,42 +21,37 @@ export default function BottomNav() {
   return (
     <nav id="_d8">
       <a
-        id="_en"
+        href="#"
         className={`_eu${isHome ? ' active' : ''}`}
+        id="_en"
         tabIndex={1}
         onClick={handleHome}
-        data-i18n="nav.home"
-        role="button"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
+        <svg className="_eo" viewBox="0 0 24 24">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
         </svg>
-        <span>{t('nav.home') || 'Home'}</span>
+        <span className="_ea" data-i18n="nav.home">{t('nav.home') || 'Home'}</span>
       </a>
       <a
-        id="_dn"
+        href="#"
         className="_eu"
+        id="_dn"
         tabIndex={2}
         onClick={handleSearch}
-        data-i18n="nav.search"
-        role="button"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        <svg className="_eo" viewBox="0 0 24 24">
+          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
         </svg>
-        <span>{t('nav.search') || 'Search'}</span>
+        <span className="_ea" data-i18n="nav.search">{t('nav.search') || 'Search'}</span>
       </a>
       <a
-        id="_dg"
-        className="_eu"
-        tabIndex={3}
         href="../"
-        data-i18n="nav.profile"
+        className="_eu"
+        id="_dg"
+        tabIndex={3}
       >
-        <div>Q</div>
-        <span>{t('nav.profile') || 'Profile'}</span>
+        <div className="_eo _cr">Q</div>
+        <span className="_ea" data-i18n="nav.profile">{t('nav.profile') || 'Profile'}</span>
       </a>
     </nav>
   );

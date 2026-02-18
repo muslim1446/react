@@ -4,27 +4,16 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useI18n } from '../contexts/I18nContext';
 import useAudioPlayer from '../hooks/useAudioPlayer';
 import useCinemaCaptions from '../hooks/useCinemaCaptions';
-import useIdleDetection from '../hooks/useIdleDetection';
 import useMediaSession from '../hooks/useMediaSession';
 import { getTunneledUrl } from '../utils/api';
 import { syncStateToUrl } from '../utils/streamCodec';
 import { loadTranslation, getVerseText } from '../utils/translationParser';
 import PlayerControls from './PlayerControls';
 import CinemaNav from './CinemaNav';
-import PlayPauseIndicator from './PlayPauseIndicator';
-import SeekIndicator from './SeekIndicator';
-import { STORAGE_KEYS } from '../utils/constants';
 
-// =========================================================================
-// CINEMA PLAYER — Full-screen immersive Quran player
-// ID: #_dd, activated with .active class
-// Features: double-buffered images, timed captions, audio engine,
-// idle detection, seek indicators, play/pause indicators
-// =========================================================================
-
-export default function CinemaPlayer() {
+export default function CinemaPlayer({ feedbackRef }) {
   const { state, dispatch } = usePlayer();
-  const { chapters, reciters, translations, loaded: configLoaded } = useConfig();
+  const { chapters, reciters, translations, forbiddenToTranslateSet, loaded: configLoaded } = useConfig();
   const { t } = useI18n();
 
   const isActive = state.view === 'cinema';
@@ -38,8 +27,7 @@ export default function CinemaPlayer() {
   const [translationText, setTranslationText] = useState('');
   const [showStartBtn, setShowStartBtn] = useState(true);
 
-  // Feedback indicators
-  const [feedbackType, setFeedbackType] = useState(null); // 'play'|'pause'|'forward'|'backward'
+  // Seek indicators
   const [leftSeekActive, setLeftSeekActive] = useState(false);
   const [rightSeekActive, setRightSeekActive] = useState(false);
 
@@ -70,22 +58,16 @@ export default function CinemaPlayer() {
     toggle,
     setSource,
     smartSeek,
-    softFadeAudio,
   } = useAudioPlayer({
     onEnded: handleEnded,
     onPlay: handlePlay,
     onPause: handlePause,
   });
 
-  // Idle detection
-  useIdleDetection(state.view, (idle) => {
-    dispatch({ type: ActionTypes.SET_IDLE, payload: idle });
-  });
-
   // Media Session
   useMediaSession({
     title: chapters[state.chapterIndex]?.english_name || 'Tuwa',
-    artist: reciters[state.reciterId]?.name || 'OpenTuwa',
+    artist: 'The Sight | Original Series',
     artwork: null,
     onPlay: () => play(),
     onPause: () => pause(),
@@ -95,56 +77,74 @@ export default function CinemaPlayer() {
     onSeekBackward: () => smartSeek(-10),
   });
 
+  // Show feedback via parent ref
+  const showFeedback = useCallback((type) => {
+    if (feedbackRef?.current?.showFeedback) {
+      feedbackRef.current.showFeedback(type);
+    }
+  }, [feedbackRef]);
+
   // -----------------------------------------------------------------------
   // LOAD VERSE — Core playback function
   // -----------------------------------------------------------------------
   const loadVerse = useCallback(async (autoplay = false) => {
     if (!configLoaded || !chapters.length) return;
 
-    const chapterNum = state.chapterIndex + 1;
-    const verseNum = state.verseIndex + 1;
+    const chapter = chapters[state.chapterIndex];
+    if (!chapter) return;
+
+    const chapterNum = chapter.chapterNumber || (state.chapterIndex + 1);
+    const verses = chapter.streamprotectedcase_cww2 || chapter.verses || [];
+    const verseData = verses[state.verseIndex];
+    const verseNum = verseData?.verseNumber || (state.verseIndex + 1);
     const chapterStr = String(chapterNum).padStart(3, '0');
     const verseStr = String(verseNum).padStart(3, '0');
+    const verseKey = `${chapterNum}-${verseNum}`;
+    const isForbidden = forbiddenToTranslateSet?.has(verseKey);
 
     dispatch({ type: ActionTypes.SET_BUFFERING, payload: true });
 
     try {
       // 1. Load verse image (double-buffered crossfade)
-      const imgFilename = `${chapterNum}_${verseNum}.png`;
-      // Images go through tunneled URL
       try {
+        const imgFilename = `${chapterNum}_${verseNum}.png`;
         const imgUrl = await getTunneledUrl('image', imgFilename);
         const targetImg = isImgSwapped ? currentImgRef.current : nextImgRef.current;
-        if (targetImg) {
+        const activeImg = isImgSwapped ? nextImgRef.current : currentImgRef.current;
+        if (targetImg && imgUrl) {
           targetImg.src = imgUrl;
+          targetImg.onload = () => {
+            if (activeImg) activeImg.classList.remove('_at');
+            targetImg.classList.add('_at');
+            dispatch({ type: ActionTypes.SET_BUFFERING, payload: false });
+          };
+          if (targetImg.complete && targetImg.naturalHeight !== 0) {
+            if (activeImg) activeImg.classList.remove('_at');
+            targetImg.classList.add('_at');
+          }
           setIsImgSwapped(prev => !prev);
         }
       } catch (e) {
         // Image load failure is non-fatal
       }
 
-      // 2. Load translation text
-      if (state.translationId && translations[state.translationId]) {
+      // 2. Load audio
+      const audioFilename = `${chapterStr}${verseStr}.mp3`;
+      const audioUrl = await getTunneledUrl('audio', audioFilename);
+      await setSource(audioUrl, autoplay);
+
+      // 3. Load translation text (after audio so pause events don't clear timers)
+      if (!isForbidden && state.translationId && translations[state.translationId]) {
         const doc = await loadTranslation(state.translationId, translations);
         if (doc) {
           const text = getVerseText(doc, chapterNum, verseNum);
           setTranslationText(text);
-
-          // Cinema captions: sync chunks to audio duration
-          if (audioRef.current && audioRef.current.duration && !isNaN(audioRef.current.duration)) {
-            playCinemaCaptions(text, audioRef.current.duration, (chunk) => {
-              setCaptionText(chunk);
-            });
-          } else {
-            setCaptionText(text);
-          }
+          setCaptionText(text);
         }
+      } else {
+        setTranslationText('');
+        setCaptionText('');
       }
-
-      // 3. Load audio
-      const audioFilename = `${chapterStr}${verseStr}.mp3`;
-      const audioUrl = await getTunneledUrl('audio', audioFilename);
-      await setSource(audioUrl, autoplay);
 
       // 4. Save state
       syncStateToUrl({
@@ -156,15 +156,15 @@ export default function CinemaPlayer() {
       });
 
       // Update document title
-      const chapterName = chapters[state.chapterIndex]?.english_name || '';
-      document.title = `${chapterName} - Verse ${verseNum} | Tuwa`;
+      const chapterName = chapter.english_name || '';
+      document.title = `${chapterName} | Tuwa`;
 
       // Update chapter metadata
       dispatch({
         type: ActionTypes.SET_CHAPTER_META,
         payload: {
           name: chapterName,
-          verseCount: chapters[state.chapterIndex]?.verse_count || 7,
+          verseCount: verses.length || 7,
         },
       });
 
@@ -174,9 +174,10 @@ export default function CinemaPlayer() {
       dispatch({ type: ActionTypes.SET_BUFFERING, payload: false });
     }
   }, [
-    configLoaded, chapters, translations, reciters, state.chapterIndex, state.verseIndex,
+    configLoaded, chapters, translations, forbiddenToTranslateSet,
+    state.chapterIndex, state.verseIndex,
     state.reciterId, state.translationId, state.audioTranslationId,
-    dispatch, isImgSwapped, setSource, audioRef, playCinemaCaptions,
+    dispatch, isImgSwapped, setSource,
   ]);
 
   // Load verse when chapter/verse/reciter/translation changes
@@ -184,19 +185,13 @@ export default function CinemaPlayer() {
     if (isActive && configLoaded) {
       loadVerse(state.isPlaying);
     }
-  }, [state.chapterIndex, state.verseIndex, state.reciterId, state.translationId, isActive, configLoaded, loadVerse]);
+  }, [state.chapterIndex, state.verseIndex, state.reciterId, state.translationId, isActive, configLoaded]);
 
   // Handle Start button
   const handleStart = useCallback(() => {
     setShowStartBtn(false);
     loadVerse(true);
   }, [loadVerse]);
-
-  // Show interaction feedback
-  const showFeedback = useCallback((type) => {
-    setFeedbackType(type);
-    setTimeout(() => setFeedbackType(null), 600);
-  }, []);
 
   // Mobile double-tap zones
   const handleTouchStart = useCallback((e) => {
@@ -235,24 +230,22 @@ export default function CinemaPlayer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive, toggle, state.isPlaying, showFeedback]);
 
-  // H2 title sync (replaces MutationObserver)
+  // Chapter title
   const chapterTitle = chapters[state.chapterIndex]?.english_name || '';
+  const chapter = chapters[state.chapterIndex];
+  const chapterNum = chapter?.chapterNumber || (state.chapterIndex + 1);
+  const verses = chapter?.streamprotectedcase_cww2 || chapter?.verses || [];
+  const verseData = verses[state.verseIndex];
+  const verseNum = verseData?.verseNumber || (state.verseIndex + 1);
 
   return (
-    <div id="_dd" className={isActive ? 'active' : ''}>
-      {/* Audio elements */}
-      <audio id="_cq" crossOrigin="anonymous" ref={audioRef} />
-      <audio id="_e" crossOrigin="anonymous" ref={translationAudioRef} />
-
-      {/* Cinema nav (back/forward) */}
-      <CinemaNav />
-
-      {/* Header area */}
+    <>
+      {/* Touch area */}
       <div id="_a6" onTouchStart={handleTouchStart}>
         {/* Sub-navigation with chapter title */}
-        <div id="_b7">
-          <h2 id="_az">{chapterTitle}</h2>
-        </div>
+        <nav id="_b7">
+          <h2 className="_av" id="_az">{chapterTitle}</h2>
+        </nav>
 
         {/* Content area */}
         <div className="_by">
@@ -262,62 +255,78 @@ export default function CinemaPlayer() {
           {state.isBuffering && <div className="_bl" />}
 
           {/* Verse display container */}
-          <div id="_dk">
-            <div className="container">
-              <h1 id="_ch">{chapterTitle}</h1>
-
-              {/* Gradient overlays */}
-              <div className="hero-shadowz-overlay" />
-              <div className="_l" />
-
-              {/* Double-buffered verse images */}
-              <div id="_bd">
-                <div id="_be">
-                  <div id="_0" />
-                  <img
-                    id="_do"
-                    ref={currentImgRef}
-                    className={isImgSwapped ? '' : '_at'}
-                    width="600"
-                    height="300"
-                    loading="eager"
-                    alt=""
-                  />
-                  <img
-                    id="_bh"
-                    ref={nextImgRef}
-                    className={isImgSwapped ? '_at' : ''}
-                    loading="lazy"
-                    alt=""
-                  />
-                </div>
-              </div>
-
-              {/* Translation text */}
-              <div id="_au" dir="auto">
-                {captionText || translationText}
-              </div>
-            </div>
-          </div>
+          <div className="_dk" id="_dk" />
 
           {/* Start button */}
           {showStartBtn && (
-            <button id="_ek" onClick={handleStart}>
-              Start
+            <button id="_ek" className="_ek" onClick={handleStart}>
+              {t('player.start') || 'Start'}
             </button>
           )}
         </div>
 
         {/* Seek indicators */}
-        <SeekIndicator side="left" active={leftSeekActive} />
-        <SeekIndicator side="right" active={rightSeekActive} />
+        <div id="_4" className={`_s left${leftSeekActive ? ' active' : ''}`}>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" />
+          </svg>
+          <span>-10s</span>
+        </div>
+        <div id="_v" className={`_s right${rightSeekActive ? ' active' : ''}`}>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6-8.5-6z" />
+          </svg>
+          <span>+10s</span>
+        </div>
       </div>
 
-      {/* Play/Pause/Forward/Backward indicators */}
-      <PlayPauseIndicator type={feedbackType} />
+      {/* Cinema nav (back/forward) */}
+      <CinemaNav />
+
+      {/* Media container */}
+      <div className="container">
+        <audio id="_cq" crossOrigin="anonymous" ref={audioRef} />
+        <audio id="_e" crossOrigin="anonymous" ref={translationAudioRef} />
+
+        <h1 id="_ch">
+          {chapter?.title || ''}{' '}
+          <span className="_ar">({chapterNum}:{verseNum})</span>
+        </h1>
+
+        <div className="hero-shadowz-overlay" />
+        <div className="_l" />
+
+        {/* Double-buffered verse images */}
+        <div id="_bd">
+          <div id="_be">
+            <div id="_0" />
+            <img
+              id="_do"
+              ref={currentImgRef}
+              className={isImgSwapped ? '' : '_at'}
+              width="600"
+              height="300"
+              loading="eager"
+              alt=""
+            />
+            <img
+              id="_bh"
+              ref={nextImgRef}
+              className={isImgSwapped ? '_at' : ''}
+              loading="lazy"
+              alt=""
+            />
+          </div>
+        </div>
+
+        {/* Translation text */}
+        <div id="_au" dir="auto">
+          {captionText || translationText}
+        </div>
+      </div>
 
       {/* Player controls bar */}
       <PlayerControls />
-    </div>
+    </>
   );
 }

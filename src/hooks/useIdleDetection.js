@@ -26,6 +26,9 @@ export default function useIdleDetection(view, onIdleChange) {
     clearTimeout(failsafeRef.current);
 
     timerRef.current = setTimeout(() => {
+      // Don't go idle if a custom select dropdown is open
+      if (document.querySelector('._k.open')) return;
+
       setIdle(true);
 
       // Cinema failsafe: auto-blur after additional 5s

@@ -3,6 +3,7 @@ import { usePlayer, ActionTypes } from '../contexts/PlayerContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useI18n } from '../contexts/I18nContext';
 import { searchChapters } from '../utils/api';
+import { encodeStream } from '../utils/streamCodec';
 import { KEYBOARD_KEYS } from '../utils/constants';
 
 // =========================================================================
@@ -12,75 +13,89 @@ import { KEYBOARD_KEYS } from '../utils/constants';
 // =========================================================================
 
 export default function SearchOverlay() {
-  const [active, setActive] = useState(false);
-  const [query, setQuery] = useState('');
+  const [searchString, setSearchString] = useState('');
   const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const { chapters } = useConfig();
-  const { dispatch } = usePlayer();
+  const { chapters, keyboardKeys } = useConfig();
+  const { state, dispatch } = usePlayer();
   const { t } = useI18n();
   const searchTimerRef = useRef(null);
 
-  // Expose open/close globally
+  // Use config keyboard keys or fallback to constants
+  const keys = (keyboardKeys && keyboardKeys.length > 0) ? keyboardKeys : KEYBOARD_KEYS;
+
+  // Expose open/close globally for BottomNav compatibility
   useEffect(() => {
     window.openSearch = (initialQuery) => {
-      setActive(true);
-      if (initialQuery) setQuery(initialQuery);
+      const el = document.getElementById('_bj');
+      if (el) el.classList.add('active');
+      if (initialQuery) setSearchString(initialQuery);
     };
-    window.closeSearch = () => setActive(false);
+    window.closeSearch = () => {
+      const el = document.getElementById('_bj');
+      if (el) el.classList.remove('active');
+    };
+    return () => {
+      window.openSearch = undefined;
+      window.closeSearch = undefined;
+    };
   }, []);
 
-  // Auto-search when query length > 2
+  // Close search helper
+  const closeSearch = useCallback(() => {
+    const el = document.getElementById('_bj');
+    if (el) el.classList.remove('active');
+  }, []);
+
+  // Launch player: encode stream token and navigate
+  const launchPlayer = useCallback((chapterNum, verseNum) => {
+    const token = encodeStream(chapterNum, verseNum, state.reciterId, state.translationId, state.audioTranslationId);
+    window.location.assign(`?stream=${token}`);
+  }, [state.reciterId, state.translationId, state.audioTranslationId]);
+
+  // Auto-search when searchString length > 2
   useEffect(() => {
-    if (query.length <= 2) {
+    if (searchString.length <= 2) {
       setResults([]);
       return;
     }
 
     clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(async () => {
-      setSearching(true);
       try {
-        const data = await searchChapters(query);
+        const data = await searchChapters(searchString);
         if (data && Array.isArray(data)) {
-          setResults(data.filter(n => n >= 1 && n <= 114));
+          // data is array of 1-based chapter numbers, convert to 0-based indices
+          setResults(data.filter(n => n >= 1 && n <= 114).map(n => n - 1));
         } else if (data && data.streamprotectedtrack_cee2) {
           const arr = Array.isArray(data.streamprotectedtrack_cee2)
             ? data.streamprotectedtrack_cee2
             : [data.streamprotectedtrack_cee2];
-          setResults(arr.filter(n => n >= 1 && n <= 114));
+          setResults(arr.filter(n => n >= 1 && n <= 114).map(n => n - 1));
+        } else {
+          setResults([]);
         }
       } catch (e) {
         console.error('[Search] Error:', e);
-      } finally {
-        setSearching(false);
       }
     }, 500);
 
     return () => clearTimeout(searchTimerRef.current);
-  }, [query]);
+  }, [searchString]);
 
-  // Keyboard key press handler (for on-screen keyboard)
+  // Keyboard key press handler
   const handleKeyPress = useCallback((key) => {
     if (key === 'SPACE') {
-      setQuery(prev => prev + ' ');
+      setSearchString(prev => prev + ' ');
     } else if (key === 'DEL') {
-      setQuery(prev => prev.slice(0, -1));
+      setSearchString(prev => prev.slice(0, -1));
     } else if (key === 'CLEAR') {
-      setQuery('');
+      setSearchString('');
     } else {
-      setQuery(prev => prev + key.toLowerCase());
+      setSearchString(prev => prev + key.toLowerCase());
     }
   }, []);
 
-  // Result card click
-  const handleResultClick = useCallback((chapterNum) => {
-    setActive(false);
-    dispatch({ type: ActionTypes.SET_CHAPTER, payload: chapterNum - 1 });
-    dispatch({ type: ActionTypes.SET_VIEW, payload: 'cinema' });
-  }, [dispatch]);
-
-  // Voice search (Web Speech API)
+  // Voice search handler
   const handleVoiceSearch = useCallback(() => {
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -88,84 +103,60 @@ export default function SearchOverlay() {
     recognition.lang = 'en-US';
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript;
-      setQuery(transcript);
+      setSearchString(transcript);
     };
     recognition.start();
   }, []);
 
   // Close on Escape
   useEffect(() => {
-    if (!active) return;
     function handleEsc(e) {
-      if (e.key === 'Escape') setActive(false);
+      if (e.key === 'Escape') closeSearch();
     }
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [active]);
+  }, [closeSearch]);
 
   return (
-    <div id="_bj" className={active ? 'active' : ''}>
-      {/* Left panel: keyboard + voice */}
+    <div id="_bj">
       <div className="_a0">
-        <button
-          id="_a1"
-          role="button"
-          tabIndex={0}
-          data-i18n-aria-label="search.voiceSearch"
-          onClick={handleVoiceSearch}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-            <line x1="8" y1="23" x2="16" y2="23" />
+        <div id="_a1" tabIndex={0} role="button" aria-label="Voice Search" onClick={handleVoiceSearch}>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
           </svg>
-        </button>
-
-        {/* Search text display */}
-        <div id="_t">{query || 'Type to search...'}</div>
-
-        {/* On-screen keyboard grid */}
-        <div id="_cc" className="_cc">
-          {KEYBOARD_KEYS.map((key) => (
-            <button
-              key={key}
-              className="_key"
-              onClick={() => handleKeyPress(key)}
+        </div>
+        <div id="_t">{searchString}</div>
+        <div className="_cc" id="_cc">
+          {keys.map((key, i) => (
+            <div
+              key={i}
+              className={`key${['SPACE', 'DEL', 'CLEAR'].includes(key) ? ' wide' : ''}`}
               tabIndex={0}
+              onClick={() => handleKeyPress(key)}
+              onKeyDown={e => e.key === 'Enter' && handleKeyPress(key)}
             >
               {key}
-            </button>
+            </div>
           ))}
         </div>
       </div>
-
-      {/* Right panel: results */}
       <div className="_a5">
-        <h3>{t('search.topResults') || 'Top Results'}</h3>
-        <div id="_5">
-          {searching && <div className="_bl" />}
-          {!searching && results.length === 0 && query.length > 2 && (
-            <p>Use the keyboard to describe a topic...</p>
-          )}
-          {results.map((chapterNum) => {
-            const chapter = chapters[chapterNum - 1];
-            if (!chapter) return null;
-            return (
-              <div
-                key={chapterNum}
-                className="_dw"
-                tabIndex={0}
-                role="button"
-                onClick={() => handleResultClick(chapterNum)}
-              >
-                <div className="_c5">{chapterNum}</div>
-                <div className="_dz">
-                  <span className="_d1">{chapter.english_name || `Chapter ${chapterNum}`}</span>
-                </div>
-              </div>
-            );
-          })}
+        <div className="_dp _h">Top Results</div>
+        <div className="_cx" id="_5">
+          {results.length === 0 && <div className="_dq">Use the keyboard to describe a topic...</div>}
+          {results.map(idx => (
+            <div
+              key={idx}
+              className="_dw"
+              data-streamprotectedtrack_c-ee2={chapters[idx]?.chapterNumber}
+              onClick={() => { closeSearch(); launchPlayer(chapters[idx].chapterNumber, 1); }}
+            >
+              <div className="_c5">{chapters[idx]?.chapterNumber}</div>
+              <div className="_ds">{chapters[idx]?.english_name}</div>
+              <div className="_er">{chapters[idx]?.title || ''}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

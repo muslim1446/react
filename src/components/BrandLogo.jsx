@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react';
 
-// =========================================================================
-// BRAND LOGO — Fixed position "Tuwa" logo + text
-// Hidden on mobile (< 768px), shared between app and landing pages
-// Uses obfuscated class names to match existing CSS
-// =========================================================================
-
 export default function BrandLogo({ logoSrc = 'assets/ui/logo.png' }) {
-  const [visible, setVisible] = useState(window.innerWidth >= 768);
+  const [visible, setVisible] = useState(() => {
+    // Check for ?regex param — if present, hide
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('regex')) return false;
+    return window.innerWidth >= 768;
+  });
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('regex')) {
+      setVisible(false);
+      return;
+    }
+
     function handleResize() {
       setVisible(window.innerWidth >= 768);
     }
@@ -20,8 +25,8 @@ export default function BrandLogo({ logoSrc = 'assets/ui/logo.png' }) {
   return (
     <a
       href="/"
-      id="_d3"
       className="_el"
+      id="_d3"
       aria-label="Tuwa Home"
       style={{ display: visible ? 'flex' : 'none' }}
     >

@@ -1,24 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { I18nProvider } from '../contexts/I18nContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { PlayerProvider } from '../contexts/PlayerContext';
+import { PlayerProvider, usePlayer, ActionTypes } from '../contexts/PlayerContext';
 import UniversalLoader from '../components/UniversalLoader';
+import PlayPauseIndicator from '../components/PlayPauseIndicator';
 import BrandLogo from '../components/BrandLogo';
 import ContentProtection from '../components/ContentProtection';
-import PageTransition from '../components/PageTransition';
 import SearchBox from '../components/SearchBox';
 import BottomNav from '../components/BottomNav';
 import SearchOverlay from '../components/SearchOverlay';
 import Dashboard from '../components/Dashboard';
 import CinemaPlayer from '../components/CinemaPlayer';
-import ArabicModal from '../components/ArabicModal';
 import OfflineStatusHub from '../components/OfflineStatusHub';
 import useSpatialNav from '../hooks/useSpatialNav';
+import useIdleDetection from '../hooks/useIdleDetection';
+import useTextFade from '../hooks/useTextFade';
 import useHibernation from '../hooks/useHibernation';
 import useCurrencySanitizer from '../hooks/useCurrencySanitizer';
 import { STORAGE_KEYS } from '../utils/constants';
 import { initAnalytics } from '../utils/analytics';
+import { getStateFromUrl } from '../utils/streamCodec';
 
 // =========================================================================
 // APP — Main application root
@@ -27,11 +29,17 @@ import { initAnalytics } from '../utils/analytics';
 // =========================================================================
 
 function AppInner() {
-  const [searchBarHidden, setSearchBarHidden] = useState(false);
+  const { state, dispatch } = usePlayer();
   const { isTvMode } = useAuth();
+  const feedbackRef = useRef(null);
 
   // TV spatial navigation engine
   useSpatialNav({ enabled: isTvMode });
+
+  // Idle detection — updates body.idle class
+  useIdleDetection(state.view, useCallback((idle) => {
+    dispatch({ type: ActionTypes.SET_IDLE, payload: idle });
+  }, [dispatch]));
 
   // Session hibernation (offline save/restore)
   useHibernation();
@@ -39,37 +47,23 @@ function AppInner() {
   // Currency symbol stripping (translation artifacts)
   useCurrencySanitizer();
 
+  // Text fade hook — placeholder ref (used by cinema captions elsewhere)
+  const textFadeRef = useRef(null);
+  useTextFade(textFadeRef, state.captionText);
+
   useEffect(() => {
     initAnalytics();
   }, []);
 
-  // Mobile first-load: hide search bar on first session visit (mobile only)
+  // URL-based view: if URL has ?stream= or ?streamprotectedtrack_c-ee2=, switch to cinema
   useEffect(() => {
-    const isMobile = window.matchMedia
-      ? window.matchMedia('(max-width: 768px)').matches
-      : window.innerWidth <= 768;
-    const isFirstLoad = !sessionStorage.getItem(STORAGE_KEYS.HAS_LOADED);
-
-    if (isMobile && isFirstLoad) {
-      sessionStorage.setItem(STORAGE_KEYS.HAS_LOADED, 'true');
-      setSearchBarHidden(true);
+    const url = new URL(window.location.href);
+    const hasStream = url.searchParams.has('stream');
+    const hasProtectedTrack = url.searchParams.has('streamprotectedtrack_c-ee2');
+    if (hasStream || hasProtectedTrack) {
+      dispatch({ type: ActionTypes.SET_VIEW, payload: 'cinema' });
     }
-  }, []);
-
-  // TV environment: hide search bar
-  useEffect(() => {
-    if (isTvMode) {
-      setSearchBarHidden(true);
-    }
-  }, [isTvMode]);
-
-  // URL-based search bar hiding: hide when URL contains "stream"
-  useEffect(() => {
-    const url = window.location.href;
-    if (url.includes('stream')) {
-      setSearchBarHidden(true);
-    }
-  }, []);
+  }, [dispatch]);
 
   // ?regex param hides brand elements
   useEffect(() => {
@@ -84,28 +78,21 @@ function AppInner() {
   return (
     <>
       <UniversalLoader />
-      <ContentProtection />
-      <PageTransition />
+      <PlayPauseIndicator ref={feedbackRef} />
+      <div id="_m" />
       <BrandLogo />
-      {!searchBarHidden && <SearchBox />}
+      <SearchBox />
       <BottomNav />
       <SearchOverlay />
-      <Dashboard />
-      <CinemaPlayer />
-      <ArabicModal />
+      <div id="_bq" className={state.view === 'dashboard' ? 'active' : ''}>
+        <Dashboard />
+      </div>
+      <audio id="_ca" crossOrigin="anonymous" muted preload="none" hidden style={{ display: 'none' }} />
+      <div id="_dd" className={state.view === 'cinema' ? 'active' : ''}>
+        <CinemaPlayer feedbackRef={feedbackRef} />
+      </div>
       <OfflineStatusHub />
-
-      {/* Hidden decoy audio element (anti-scraping measure) */}
-      <audio
-        id="_ca"
-        crossOrigin="anonymous"
-        muted
-        preload="none"
-        hidden
-        style={{ display: 'none' }}
-        onPlay={(e) => e.target.pause()}
-        onPlaying={(e) => e.target.pause()}
-      />
+      <ContentProtection />
     </>
   );
 }

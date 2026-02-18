@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { STORAGE_KEYS } from '../utils/constants';
+import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { getStateFromUrl } from '../utils/streamCodec';
 
 const PlayerContext = createContext(null);
+
+// Default storage key — will be overridden by config once loaded
+const DEFAULT_STORAGE_KEY = 'streambasesecured_ca6State_1';
 
 // =========================================================================
 // PLAYER STATE
@@ -98,23 +100,74 @@ function playerReducer(state, action) {
       return { ...state, mode0: action.payload };
     case ActionTypes.RESTORE_STATE:
       return { ...state, ...action.payload };
-    case ActionTypes.NEXT_VERSE:
-      // Auto-advance: increment verse, wrap to next chapter if needed
-      if (state.verseIndex + 1 < state.currentVerseCount) {
+    case ActionTypes.NEXT_VERSE: {
+      // payload.verseCount is the authoritative verse count passed by the caller
+      const verseCount = (action.payload && action.payload.verseCount) || state.currentVerseCount;
+      if (state.verseIndex + 1 < verseCount) {
         return { ...state, verseIndex: state.verseIndex + 1 };
       }
       // Next chapter (wraps to 0 if past 113)
       const nextChapter = (state.chapterIndex + 1) % 114;
       return { ...state, chapterIndex: nextChapter, verseIndex: 0 };
+    }
     default:
       return state;
   }
 }
 
 // =========================================================================
+// HELPERS: localStorage with vanilla JS format
+// =========================================================================
+
+/**
+ * Read state from localStorage using the vanilla JS key format:
+ *   { 'streamprotectedtrack_c-ee2': chapterIndex,
+ *     'streamprotectedcase_c-ww2': verseIndex,
+ *     streamprotectedlicense_artist_cr1: reciterId,
+ *     trans: translationId,
+ *     audio_trans: audioTranslationId }
+ */
+function readFromStorage(storageKey) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      chapterIndex: parsed['streamprotectedtrack_c-ee2'] ?? 0,
+      verseIndex: parsed['streamprotectedcase_c-ww2'] ?? 0,
+      reciterId: parsed['streamprotectedlicense_artist_cr1'] ?? '',
+      translationId: parsed['trans'] ?? '',
+      audioTranslationId: parsed['audio_trans'] ?? '',
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Write state to localStorage in vanilla JS format.
+ */
+function writeToStorage(storageKey, state) {
+  try {
+    const toSave = {
+      'streamprotectedtrack_c-ee2': state.chapterIndex,
+      'streamprotectedcase_c-ww2': state.verseIndex,
+      'streamprotectedlicense_artist_cr1': state.reciterId,
+      'trans': state.translationId,
+      'audio_trans': state.audioTranslationId,
+    };
+    localStorage.setItem(storageKey, JSON.stringify(toSave));
+  } catch (e) {
+    // Storage full or blocked
+  }
+}
+
+// =========================================================================
 // PROVIDER
 // =========================================================================
-export function PlayerProvider({ children }) {
+export function PlayerProvider({ children, storageKey }) {
+  const effectiveStorageKey = storageKey || DEFAULT_STORAGE_KEY;
+
   const [state, dispatch] = useReducer(playerReducer, initialState, (init) => {
     // Restore from URL first, then localStorage
     const urlState = getStateFromUrl();
@@ -129,42 +182,45 @@ export function PlayerProvider({ children }) {
       };
     }
 
-    // Try localStorage
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_STATE);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...init,
-          chapterIndex: parsed.chapterIndex || 0,
-          verseIndex: parsed.verseIndex || 0,
-          reciterId: parsed.reciterId || '',
-          translationId: parsed.translationId || '',
-          audioTranslationId: parsed.audioTranslationId || '',
-        };
-      }
-    } catch (e) {
-      // Ignore parse errors
+    // Try localStorage with the default key (at init time we don't have config yet)
+    const saved = readFromStorage(DEFAULT_STORAGE_KEY);
+    if (saved) {
+      return {
+        ...init,
+        chapterIndex: saved.chapterIndex,
+        verseIndex: saved.verseIndex,
+        reciterId: saved.reciterId,
+        translationId: saved.translationId,
+        audioTranslationId: saved.audioTranslationId,
+      };
     }
 
     return init;
   });
 
-  // Persist state to localStorage on changes
+  // Re-read localStorage when storageKey changes (config loaded with a different key)
   useEffect(() => {
-    const toSave = {
-      chapterIndex: state.chapterIndex,
-      verseIndex: state.verseIndex,
-      reciterId: state.reciterId,
-      translationId: state.translationId,
-      audioTranslationId: state.audioTranslationId,
-    };
-    try {
-      localStorage.setItem(STORAGE_KEYS.PLAYER_STATE, JSON.stringify(toSave));
-    } catch (e) {
-      // Storage full or blocked
+    if (effectiveStorageKey !== DEFAULT_STORAGE_KEY) {
+      const saved = readFromStorage(effectiveStorageKey);
+      if (saved) {
+        dispatch({
+          type: ActionTypes.RESTORE_STATE,
+          payload: {
+            chapterIndex: saved.chapterIndex,
+            verseIndex: saved.verseIndex,
+            reciterId: saved.reciterId,
+            translationId: saved.translationId,
+            audioTranslationId: saved.audioTranslationId,
+          },
+        });
+      }
     }
-  }, [state.chapterIndex, state.verseIndex, state.reciterId, state.translationId, state.audioTranslationId]);
+  }, [effectiveStorageKey]);
+
+  // Persist state to localStorage on changes using vanilla JS format
+  useEffect(() => {
+    writeToStorage(effectiveStorageKey, state);
+  }, [effectiveStorageKey, state.chapterIndex, state.verseIndex, state.reciterId, state.translationId, state.audioTranslationId]);
 
   // Manage body class for mode0
   useEffect(() => {

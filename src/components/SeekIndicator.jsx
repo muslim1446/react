@@ -1,11 +1,5 @@
 import React from 'react';
 
-// =========================================================================
-// SEEK INDICATOR — Left (-10s) / Right (+10s) glassmorphic circles
-// Class: ._s, positioned fixed at 10% from edges
-// Active state: opacity 1, scale 1.1
-// =========================================================================
-
 export default function SeekIndicator({ side, active }) {
   const isLeft = side === 'left';
 
