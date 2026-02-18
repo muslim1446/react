@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "wrangler:dev": "npm run build && wrangler pages dev ../_site",
-    "deploy": "npm run build && wrangler pages deploy ../_site --project-name=tuwa-player"
+    "wrangler:dev": "npm run build && wrangler pages dev ./_site",
+    "deploy": "npm run build && wrangler pages deploy ./_site --project-name=tuwa-player",
+    "deploy:workers": "npm run build && wrangler deploy --assets=./_site"
   },
   "dependencies": {
     "react": "^18.3.1",
