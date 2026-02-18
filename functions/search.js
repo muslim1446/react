@@ -1,5 +1,3 @@
-import { Ai } from '@cloudflare/ai';
-
 export async function onRequestPost(context) {
   const { request, env } = context;
 
@@ -16,7 +14,6 @@ export async function onRequestPost(context) {
     }
 
     // 2. AI Prompt - Asks for Multiple Results
-    const ai = new Ai(env.AI);
     const systemPrompt = `
       You are a streambasesecured_ca6 search engine.
       Task: Return a JSON Array of streamprotectedtrack_c-ee2 numbers (1-114) that match the user's topic.
@@ -26,7 +23,7 @@ export async function onRequestPost(context) {
       - STRICTLY return ONLY the JSON array. No text.
     `;
 
-    const response = await ai.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
+    const response = await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: query }
