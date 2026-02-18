@@ -9,7 +9,7 @@ function copyStaticAssets() {
   return {
     name: 'copy-static-assets',
     closeBundle() {
-      const outDir = resolve(__dirname, '../_site');
+      const outDir = resolve(__dirname, './_site');
 
       // Copy directories from project root
       const dirs = ['assets', 'functions'];
@@ -38,7 +38,7 @@ export default defineConfig({
   plugins: [react(), copyStaticAssets()],
   root: '.',
   build: {
-    outDir: '../_site',
+    outDir: './_site',
     emptyOutDir: true,
     rollupOptions: {
       input: {
